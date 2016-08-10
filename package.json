@@ -1,0 +1,35 @@
+{
+  "name": "@tools/gulp-collector",
+  "version": "1.0.0",
+  "description": "收集静态页面上的静态资源引用",
+  "contributors": [
+    "Luoying <luoying@fxiaoke.com>"
+  ],
+  "homepage": "http://registry-npm.firstshare.cn/",
+  "main": "index.js",
+  "scripts": {
+    "eslint": "eslint index.js"
+  },
+  "pre-commit": [
+    "eslint"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "http://git.firstshare.cn/fe-tools/gulp-collector.git"
+  },
+  "keywords": [
+    "gulp",
+    "collector",
+    "website",
+    "static",
+    "assets"
+  ],
+  "author": "luoying",
+  "license": "ISC",
+  "dependencies": {
+    "through2": "^2.0.1"
+  },
+  "devDependencies": {
+    "pre-commit": "^1.1.3"
+  }
+}
