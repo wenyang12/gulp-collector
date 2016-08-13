@@ -9,7 +9,7 @@
 const fs = require('fs');
 const path = require('path');
 const through2 = require('through2');
-const resolvePath = require('resolve-path');
+const resolvePath = require('@tools/resolve-path');
 
 // 匹配css资源，link外链或style内联样式
 const REG_CSS = /(?:<link.*href=["|'](.+\.css)["|'].*\/?>|<style.*>([^<]*)<\/style>)/gi;
