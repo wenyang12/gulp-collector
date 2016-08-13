@@ -9,13 +9,16 @@
 const fs = require('fs');
 const path = require('path');
 const through2 = require('through2');
+const resolvePath = require('resolve-path');
 
 // 匹配css资源，link外链或style内联样式
 const REG_CSS = /(?:<link.*href=["|'](.+\.css)["|'].*\/?>|<style.*>([^<]*)<\/style>)/gi;
 // 匹配js资源，script外链或内联脚本
 const REG_JS = /(?:<script.*src=["|'](.+\.js)["|'].*><\/script>|<script.*>([^<]*)<\/script>)/gi;
+// 匹配css中的图片/字体资源
+const REG_CSS_ASSETS = /url\(([^\)]+)\)/gi;
 // 匹配_group私有属性
-const REG_GROUP = /_group=["|'](\w+)["|']/;
+const REG_GROUP = /_group=["|']?([^"']+)["|']?/;
 
 // 获取指定的静态资源引用列表
 const getMatchs = (data, reg) => {
@@ -42,14 +45,22 @@ const getAsset = (pathname) => {
 };
 
 // 按顺序合并资源列表
-const concatAssets = (assets, root) => {
+const concatAssets = (assets, root, type) => {
   let content = '';
   for (let asset of assets) {
+    let base = root;
     let data = asset.data || '';
     if (asset.url) { // 外链资源，读取资源内容
       let pathname = path.join(root, asset.url);
+      base = path.dirname(pathname);
       data = getAsset(pathname);
     }
+
+    // 替换css中的图片/字体引用路径
+    if (type === 'css') {
+      data = resolvePath(data, base, root, REG_CSS_ASSETS);
+    }
+
     content += data + '\n';
   }
   return content;
@@ -116,7 +127,7 @@ const collector = {
 
     // 合并碎片资源，创建合并后的新资源文件
     for (let asset in assets) {
-      let data = concatAssets(assets[asset], root);
+      let data = concatAssets(assets[asset], root, type);
       let file = createConcatedAsset(`${asset}.${type}`, data, dest);
       // 将合并后的新资源引用注入到html文档里
       file && (html = injectAsset(html, resolveAsset(file, root), inject));
