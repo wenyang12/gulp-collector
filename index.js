@@ -54,9 +54,6 @@ const concatAssets = (assets, root, type) => {
       let pathname = path.join(root, asset.url);
       base = path.dirname(pathname);
       data = getAsset(pathname);
-
-      // 删掉碎片资源文件
-      fs.unlink(pathname, () => {});
     }
 
     // 替换css中的图片/字体引用路径
