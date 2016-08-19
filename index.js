@@ -9,6 +9,8 @@
 const fs = require('fs');
 const path = require('path');
 const through2 = require('through2');
+const gutil = require('gulp-util');
+const File = gutil.File;
 const resolvePath = require('@tools/resolve-path');
 
 // 匹配css资源，link外链或style内联样式
@@ -66,18 +68,6 @@ const concatAssets = (assets, root, type) => {
   return content;
 };
 
-// 创建合并后的资源文件
-const createConcatedAsset = (asset, data, dest) => {
-  try {
-    let file = `${dest}/${asset}`;
-    fs.writeFileSync(file, data, 'utf8');
-    return file;
-  } catch (e) {
-    console.error(e.stack);
-    return '';
-  }
-};
-
 const resolveAsset = (asset, root) => asset.replace(root, '');
 
 // 注入合并后的资源引用到html文档中
@@ -91,71 +81,103 @@ const injectAsset = (html, asset, inject) => {
   return html.replace(place, tag + place);
 };
 
-const collector = {
-  run(type, html, root, dest) {
-    let reg = {
-      css: REG_CSS,
-      js: REG_JS
-    }[type];
-    let matchs = getMatchs(html, reg);
+const replace = (html, type, root, dest) => {
+  let inject = {
+    css: 'head',
+    js: 'body'
+  }[type];
 
-    // 所要合并的碎片资源列表
-    let assets = {};
-
-    // 提取要合并的资源
-    for (let match of matchs) {
-      let tag = match[0];
-      let url = match[1];
-      let group = getGroup(tag);
-
-      // 未标记为合并的资源，略过
-      if (!group) continue;
-
-      if (!assets[group]) assets[group] = [];
-      assets[group].push({
-        url: url, // 外链
-        data: match[2] // 内联
-      });
+  // 所要合并的碎片资源列表
+  let fragments = getFragments(html, type);
+  for (let name in fragments) {
+    let fs = fragments[name];
+    for (let f of fs) {
       // 删除碎片资源的引用标签
-      html = html.replace(tag, '');
+      html = html.replace(f.tag, '');
     }
 
-    let inject = {
-      css: 'head',
-      js: 'body'
-    }[type];
-
-    // 合并碎片资源，创建合并后的新资源文件
-    for (let asset in assets) {
-      let data = concatAssets(assets[asset], root, type);
-      let file = createConcatedAsset(`${asset}.${type}`, data, dest);
-      // 将合并后的新资源引用注入到html文档里
-      file && (html = injectAsset(html, resolveAsset(file, root), inject));
-    }
-
-    return html;
-  },
-
-  css(html, root, dest) {
-    return this.run('css', html, root, dest);
-  },
-
-  js(html, root, dest) {
-    return this.run('js', html, root, dest);
+    let file = `${dest}/${name}.${type}`;
+    // 将合并后的新资源引用注入到html文档里
+    html = injectAsset(html, resolveAsset(file, root), inject);
   }
+
+  return html;
 };
 
-module.exports = (type, dest) => {
+// 获取所要合并的碎片列表
+const getFragments = (html, type) => {
+  let reg = {
+    css: REG_CSS,
+    js: REG_JS
+  }[type];
+  let matchs = getMatchs(html, reg);
+
+  let fragments = {};
+
+  // 提取要合并的资源
+  for (let match of matchs) {
+    let tag = match[0];
+    let url = match[1];
+    let group = getGroup(tag);
+
+    // 未标记为合并的资源，略过
+    if (!group) continue;
+
+    if (!fragments[group]) fragments[group] = [];
+    fragments[group].push({
+      tag: tag,
+      url: url, // 外链
+      data: match[2] // 内联
+    });
+  }
+
+  return fragments;
+};
+
+// 合并页面上的碎片资源
+const collect = (html, type, root) => {
+  let fragments = getFragments(html, type);
+  let assets = []; // 合并后的资源列表
+  for (let name in fragments) {
+    assets.push({
+      name: name,
+      content: concatAssets(fragments[name], root, type)
+    });
+  }
+  return assets;
+};
+
+module.exports = (type) => {
+  return through2.obj(function(file, enc, callback) {
+    if (file.isNull()) {
+      return callback(null, file);
+    }
+
+    let root = path.dirname(file.path);
+    let html = file.contents.toString();
+    let assets = collect(html, type, root).map(asset => {
+      return new File({
+        cwd: './',
+        base: './',
+        path: `${asset.name}.${type}`,
+        contents: new Buffer(asset.content)
+      })
+    });
+
+    assets.forEach(asset => this.push(asset));
+    callback(null);
+  });
+};
+
+module.exports.replace = (type, dest) => {
   return through2.obj((file, enc, callback) => {
     if (file.isNull()) {
       return callback(null, file);
     }
 
-    let filename = file.path;
-    let root = path.dirname(filename);
+    let root = path.dirname(file.path);
     let html = file.contents.toString();
-
-    html = collector[type](html, root, path.resolve(root, dest));
+    html = replace(html, type, root, dest);
     file.contents = new Buffer(html);
     callback(null, file);
   });
