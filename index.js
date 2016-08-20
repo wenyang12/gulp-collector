@@ -11,6 +11,7 @@ const path = require('path');
 const through2 = require('through2');
 const gutil = require('gulp-util');
 const File = gutil.File;
+const getMatchs = require('@tools/matchs');
 const resolvePath = require('@tools/resolve-path');
 
 // 匹配css资源，link外链或style内联样式
@@ -21,14 +22,6 @@ const REG_JS = /(?:<script.*src=["|'](.+\.js)["|'].*><\/script>|<script.*>([^<]*
 const REG_CSS_ASSETS = /url\(([^\)]+)\)/gi;
 // 匹配_group私有属性
 const REG_GROUP = /_group=["|']?([^"']+)["|']?/;
-
-// 获取指定的静态资源引用列表
-const getMatchs = (data, reg) => {
-  let matchs = [];
-  let match = null;
-  while ((match = reg.exec(data))) matchs.push(match);
-  return matchs;
-};
 
 // 获取_group私有属性值
 const getGroup = (tag) => {
@@ -153,12 +146,10 @@ module.exports = (type) => {
       return callback(null, file);
     }
 
-    let root = path.dirname(file.path);
+    let dirname = path.dirname(file.path);
     let html = file.contents.toString();
-    let assets = collect(html, type, root).map(asset => {
+    let assets = collect(html, type, dirname).map(asset => {
       return new File({
-        cwd: './',
-        base: './',
         path: `${asset.name}.${type}`,
         contents: new Buffer(asset.content)
       })
@@ -175,9 +166,9 @@ module.exports.replace = (type, dest) => {
       return callback(null, file);
     }
 
-    let root = path.dirname(file.path);
+    let dirname = path.dirname(file.path);
     let html = file.contents.toString();
-    html = replace(html, type, root, dest);
+    html = replace(html, type, dirname, dest);
     file.contents = new Buffer(html);
     callback(null, file);
   });
