@@ -23,6 +23,9 @@ const REG_CSS_ASSETS = /url\(([^\)]+)\)/gi;
 // 匹配_group私有属性
 const REG_GROUP = /_group=["|']?([^"']+)["|']?/;
 
+// 已合并过的
+const collecteds = [];
+
 // 获取_group私有属性值
 const getGroup = (tag) => {
   let match = tag.match(REG_GROUP);
@@ -128,19 +131,25 @@ const getFragments = (html, type) => {
 };
 
 // 合并页面上的碎片资源
-const collect = (html, type, root) => {
+const collect = (html, type, root, options) => {
   let fragments = getFragments(html, type);
   let assets = []; // 合并后的资源列表
   for (let name in fragments) {
+    // 在只合并一次的黑名单中且已合并过了，不再合并，避免重复执行浪费性能
+    if (options.once.indexOf(name) >= 0 && collecteds.indexOf(name) >= 0) continue;
     assets.push({
       name: name,
       content: concatAssets(fragments[name], root, type)
     });
+    collecteds.push(name);
   }
   return assets;
 };
 
-module.exports = (type) => {
+module.exports = (type, options) => {
+  options = Object.assign({
+    once: []
+  }, options || {});
   return through2.obj(function(file, enc, callback) {
     if (file.isNull()) {
       return callback(null, file);
@@ -148,7 +157,7 @@ module.exports = (type) => {
 
     let dirname = path.dirname(file.path);
     let html = file.contents.toString();
-    let assets = collect(html, type, dirname).map(asset => {
+    let assets = collect(html, type, dirname, options).map(asset => {
       return new File({
         path: `${asset.name}.${type}`,
         contents: new Buffer(asset.content)
