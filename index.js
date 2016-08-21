@@ -23,8 +23,11 @@ const REG_CSS_ASSETS = /url\(([^\)]+)\)/gi;
 // 匹配_group私有属性
 const REG_GROUP = /_group=["|']?([^"']+)["|']?/;
 
-// 已合并过的
-const collecteds = [];
+// 已收集的资源集合
+const collectedAssets = {
+  css: {},
+  js: {}
+};
 
 // 获取_group私有属性值
 const getGroup = (tag) => {
@@ -42,30 +45,6 @@ const getAsset = (pathname) => {
   }
 };
 
-// 按顺序合并资源列表
-const concatAssets = (assets, root, type) => {
-  let content = '';
-  for (let asset of assets) {
-    let base = root;
-    let data = asset.data || '';
-    if (asset.url) { // 外链资源，读取资源内容
-      let pathname = path.join(root, asset.url);
-      base = path.dirname(pathname);
-      data = getAsset(pathname);
-    }
-
-    // 替换css中的图片/字体引用路径
-    if (type === 'css') {
-      data = resolvePath(data, base, root, REG_CSS_ASSETS);
-    }
-
-    content += data + '\n';
-  }
-  return content;
-};
-
-const resolveAsset = (asset, root) => asset.replace(root, '');
-
 // 注入合并后的资源引用到html文档中
 const injectAsset = (html, asset, inject) => {
   let place = `</${inject}>`;
@@ -77,14 +56,14 @@ const injectAsset = (html, asset, inject) => {
   return html.replace(place, tag + place);
 };
 
-const replace = (html, type, root, dest) => {
+const replace = (type, html, dirname, dest) => {
   let inject = {
     css: 'head',
     js: 'body'
   }[type];
 
   // 所要合并的碎片资源列表
-  let fragments = getFragments(html, type);
+  let fragments = getFragments(type, html);
   for (let name in fragments) {
     let fs = fragments[name];
     for (let f of fs) {
@@ -94,14 +73,14 @@ const replace = (html, type, root, dest) => {
 
     let file = `${dest}/${name}.${type}`;
     // 将合并后的新资源引用注入到html文档里
-    html = injectAsset(html, resolveAsset(file, root), inject);
+    html = injectAsset(html, file.replace(dirname, ''), inject);
   }
 
   return html;
 };
 
 // 获取所要合并的碎片列表
-const getFragments = (html, type) => {
+const getFragments = (type, html) => {
   let reg = {
     css: REG_CSS,
     js: REG_JS
@@ -130,57 +109,86 @@ const getFragments = (html, type) => {
   return fragments;
 };
 
-// 合并页面上的碎片资源
-const collect = (html, type, root, options) => {
-  let fragments = getFragments(html, type);
-  let assets = []; // 合并后的资源列表
-  for (let name in fragments) {
-    let basename = `${name}.${type}`;
-    // 在只合并一次的黑名单中且已合并过了，不再合并，避免重复执行浪费性能
-    if (options.once.indexOf(basename) >= 0 && collecteds.indexOf(basename) >= 0) continue;
-    assets.push({
-      name: name,
-      basename: basename,
-      content: concatAssets(fragments[name], root, type)
-    });
-    collecteds.push(basename);
+// 收集页面上的碎片资源
+const collect = (type, html, dirname) => {
+  let fragments = getFragments(type, html);
+  let typeAssets = collectedAssets[type];
+
+  for (let group in fragments) {
+    let assets = fragments[group];
+
+    if (!typeAssets[group]) typeAssets[group] = [];
+    let groupAssets = typeAssets[group];
+
+    let contains = (asset) => {
+      for (let a of groupAssets) {
+        if ((asset.url && asset.url === a.url) || (asset.data && asset.data === a.data)) {
+          return true;
+        }
+      }
+      return false;
+    };
+
+    for (let asset of assets) {
+      contains(asset) || groupAssets.push({
+        dirname: dirname,
+        url: asset.url,
+        data: asset.data
+      });
+    }
   }
-  return assets;
+};
+
+// 按顺序合并碎片资源
+const concat = (assets, dirname, type) => {
+  let content = '';
+  for (let asset of assets) {
+    let assetDirname = dirname;
+    let data = asset.data || '';
+
+    if (asset.url) { // 外链资源，读取资源内容
+      let pathname = path.join(dirname, asset.url);
+      assetDirname = path.dirname(pathname);
+      data = getAsset(pathname);
+    }
+
+    // 替换css中的图片/字体引用路径
+    if (type === 'css') {
+      data = resolvePath(data, assetDirname, dirname, REG_CSS_ASSETS);
+    }
+
+    content += data + '\n';
+  }
+  return content;
 };
 
 module.exports = (type, options) => {
   options = Object.assign({
     once: []
   }, options || {});
-  return through2.obj(function(file, enc, callback) {
-    if (file.isNull()) {
-      return callback(null, file);
-    }
-
-    let dirname = path.dirname(file.path);
-    let html = file.contents.toString();
-    let assets = collect(html, type, dirname, options).map(asset => {
-      return new File({
-        path: asset.basename,
-        contents: new Buffer(asset.content)
-      })
-    });
-
-    assets.forEach(asset => this.push(asset));
+  return through2.obj((file, enc, callback) => {
+    if (file.isNull()) return callback(null, file);
+    collect(type, file.contents.toString(), path.dirname(file.path));
     callback(null);
+  }, function(callback) {
+    let typeAssets = collectedAssets[type];
+    for (let group in typeAssets) {
+      let groupAssets = typeAssets[group];
+      let asset = concat(groupAssets, groupAssets[0].dirname, type);
+      this.push(new File({
+        path: `${group}.${type}`,
+        contents: new Buffer(asset)
+      }));
+    }
+    callback();
   });
 };
 
 module.exports.replace = (type, dest) => {
   return through2.obj((file, enc, callback) => {
-    if (file.isNull()) {
-      return callback(null, file);
-    }
-
-    let dirname = path.dirname(file.path);
-    let html = file.contents.toString();
-    html = replace(html, type, dirname, dest);
-    file.contents = new Buffer(html);
+    if (file.isNull()) return callback(null, file);
+    let data = replace(type, file.contents.toString(), path.dirname(file.path), dest);
+    file.contents = new Buffer(data);
     callback(null, file);
   });
 };
