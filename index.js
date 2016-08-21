@@ -135,13 +135,15 @@ const collect = (html, type, root, options) => {
   let fragments = getFragments(html, type);
   let assets = []; // 合并后的资源列表
   for (let name in fragments) {
+    let basename = `${name}.${type}`;
     // 在只合并一次的黑名单中且已合并过了，不再合并，避免重复执行浪费性能
-    if (options.once.indexOf(name) >= 0 && collecteds.indexOf(name) >= 0) continue;
+    if (options.once.indexOf(basename) >= 0 && collecteds.indexOf(basename) >= 0) continue;
     assets.push({
       name: name,
+      basename: basename,
       content: concatAssets(fragments[name], root, type)
     });
-    collecteds.push(name);
+    collecteds.push(basename);
   }
   return assets;
 };
@@ -159,7 +161,7 @@ module.exports = (type, options) => {
     let html = file.contents.toString();
     let assets = collect(html, type, dirname, options).map(asset => {
       return new File({
-        path: `${asset.name}.${type}`,
+        path: asset.basename,
         contents: new Buffer(asset.content)
       })
     });
