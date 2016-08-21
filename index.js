@@ -22,6 +22,8 @@ const REG_JS = /(?:<script.*src=["|'](.+\.js)["|'].*><\/script>|<script.*>([^<]*
 const REG_CSS_ASSETS = /url\(([^\)]+)\)/gi;
 // 匹配_group私有属性
 const REG_GROUP = /_group=["|']?([^"']+)["|']?/;
+// 匹配跳过私有属性
+const REG_SKIP = /_skip/;
 
 // 已收集的资源集合
 const collectedAssets = {
@@ -102,7 +104,8 @@ const getFragments = (type, html) => {
     fragments[group].push({
       tag: tag,
       url: url, // 外链
-      data: match[2] // 内联
+      data: match[2], // 内联
+      skipConcat: REG_SKIP.test(tag) // 跳过合并的标识
     });
   }
 
@@ -130,7 +133,7 @@ const collect = (type, html, dirname) => {
     };
 
     for (let asset of assets) {
-      contains(asset) || groupAssets.push({
+      !contains(asset) && !asset.skipConcat && groupAssets.push({
         dirname: dirname,
         url: asset.url,
         data: asset.data
