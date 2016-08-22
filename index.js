@@ -87,6 +87,7 @@ const getFragments = (type, html) => {
     css: REG_CSS,
     js: REG_JS
   }[type];
+
   let matchs = getMatchs(html, reg);
 
   let fragments = {};
@@ -100,7 +101,10 @@ const getFragments = (type, html) => {
     // 未标记为合并的资源，略过
     if (!group) continue;
 
-    if (!fragments[group]) fragments[group] = [];
+    if (!fragments[group]) {
+      fragments[group] = [];
+    }
+
     fragments[group].push({
       tag: tag,
       url: url, // 外链
@@ -118,14 +122,17 @@ const collect = (type, html, dirname) => {
   let typeAssets = collectedAssets[type];
 
   for (let group in fragments) {
-    let assets = fragments[group];
+    if (!typeAssets[group]) {
+      typeAssets[group] = [];
+    }
 
-    if (!typeAssets[group]) typeAssets[group] = [];
+    let assets = fragments[group];
     let groupAssets = typeAssets[group];
 
     let contains = (asset) => {
       for (let a of groupAssets) {
-        if ((asset.url && asset.url === a.url) || (asset.data && asset.data === a.data)) {
+        if ((asset.url && asset.url === a.url) ||
+          (asset.data && asset.data === a.data)) {
           return true;
         }
       }
@@ -133,18 +140,21 @@ const collect = (type, html, dirname) => {
     };
 
     for (let asset of assets) {
-      !contains(asset) && !asset.skipConcat && groupAssets.push({
-        dirname: dirname,
-        url: asset.url,
-        data: asset.data
-      });
+      if (!contains(asset) && !asset.skipConcat) {
+        groupAssets.push({
+          dirname: dirname,
+          url: asset.url,
+          data: asset.data
+        });
+      }
     }
   }
 };
 
 // 按顺序合并碎片资源
-const concat = (assets, dirname, type) => {
+const concat = (type, assets, dirname) => {
   let content = '';
+
   for (let asset of assets) {
     let assetDirname = dirname;
     let data = asset.data || '';
@@ -162,13 +172,11 @@ const concat = (assets, dirname, type) => {
 
     content += data + '\n';
   }
+
   return content;
 };
 
-module.exports = (type, options) => {
-  options = Object.assign({
-    once: []
-  }, options || {});
+module.exports.collect = (type) => {
   return through2.obj((file, enc, callback) => {
     if (file.isNull()) return callback(null, file);
     collect(type, file.contents.toString(), path.dirname(file.path));
@@ -177,7 +185,7 @@ module.exports = (type, options) => {
     let typeAssets = collectedAssets[type];
     for (let group in typeAssets) {
       let groupAssets = typeAssets[group];
-      let asset = concat(groupAssets, groupAssets[0].dirname, type);
+      let asset = concat(type, groupAssets, groupAssets[0].dirname);
       this.push(new File({
         path: `${group}.${type}`,
         contents: new Buffer(asset)
