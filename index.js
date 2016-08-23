@@ -58,7 +58,7 @@ const injectAsset = (html, asset, inject) => {
   return html.replace(place, tag + place);
 };
 
-const replace = (type, html, dirname, dest) => {
+const replace = (type, html, dest) => {
   let inject = {
     css: 'head',
     js: 'body'
@@ -75,7 +75,7 @@ const replace = (type, html, dirname, dest) => {
 
     let file = `${dest}/${name}.${type}`;
     // 将合并后的新资源引用注入到html文档里
-    html = injectAsset(html, file.replace(dirname, ''), inject);
+    html = injectAsset(html, file, inject);
   }
 
   return html;
@@ -117,7 +117,7 @@ const getFragments = (type, html) => {
 };
 
 // 收集页面上的碎片资源
-const collect = (type, html, dirname) => {
+const collect = (type, html, base) => {
   let fragments = getFragments(type, html);
   let typeAssets = collectedAssets[type];
 
@@ -142,7 +142,7 @@ const collect = (type, html, dirname) => {
     for (let asset of assets) {
       if (!contains(asset) && !asset.skipConcat) {
         groupAssets.push({
-          dirname: dirname,
+          base: base,
           url: asset.url,
           data: asset.data
         });
@@ -152,22 +152,22 @@ const collect = (type, html, dirname) => {
 };
 
 // 按顺序合并碎片资源
-const concat = (type, assets, dirname) => {
+const concat = (type, assets, base) => {
   let content = '';
 
   for (let asset of assets) {
-    let assetDirname = dirname;
+    let assetDirname = base;
     let data = asset.data || '';
 
     if (asset.url) { // 外链资源，读取资源内容
-      let pathname = path.join(dirname, asset.url);
+      let pathname = path.join(base, asset.url);
       assetDirname = path.dirname(pathname);
       data = getAsset(pathname);
     }
 
     // 替换css中的图片/字体引用路径
     if (type === 'css') {
-      data = resolvePath(data, assetDirname, dirname, REG_CSS_ASSETS);
+      data = resolvePath(data, assetDirname, base, REG_CSS_ASSETS);
     }
 
     content += data + '\n';
@@ -179,15 +179,17 @@ const concat = (type, assets, dirname) => {
 module.exports.collect = (type) => {
   return through2.obj((file, enc, callback) => {
     if (file.isNull()) return callback(null, file);
-    collect(type, file.contents.toString(), path.dirname(file.path));
+    collect(type, file.contents.toString(), file.base);
     callback(null);
   }, function(callback) {
     let typeAssets = collectedAssets[type];
     for (let group in typeAssets) {
       let groupAssets = typeAssets[group];
-      let asset = concat(type, groupAssets, groupAssets[0].dirname);
+      let base = groupAssets[0].base;
+      let asset = concat(type, groupAssets, base);
       this.push(new File({
-        path: `${group}.${type}`,
+        base: base,
+        path: `${type}/${group}.${type}`,
         contents: new Buffer(asset)
       }));
     }
@@ -198,7 +200,7 @@ module.exports.collect = (type) => {
 module.exports.replace = (type, dest) => {
   return through2.obj((file, enc, callback) => {
     if (file.isNull()) return callback(null, file);
-    let data = replace(type, file.contents.toString(), path.dirname(file.path), dest);
+    let data = replace(type, file.contents.toString(), dest);
     file.contents = new Buffer(data);
     callback(null, file);
   });
