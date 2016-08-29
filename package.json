@@ -1,6 +1,6 @@
 {
   "name": "@tools/gulp-collector",
-  "version": "1.1.9",
+  "version": "1.1.10",
   "description": "收集静态页面上的静态资源引用",
   "contributors": [
     "Luoying <luoying@fxiaoke.com>"
@@ -28,7 +28,7 @@
   "license": "ISC",
   "dependencies": {
     "@tools/matchs": "^1.0.0",
-    "@tools/resolve-path": "^1.0.3",
+    "@tools/resolve-path": "^1.0.4",
     "gulp-util": "^3.0.7",
     "through2": "^2.0.1"
   },

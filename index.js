@@ -15,9 +15,9 @@ const getMatchs = require('@tools/matchs');
 const resolvePath = require('@tools/resolve-path');
 
 // 匹配css资源，link外链或style内联样式
-const REG_CSS = /(?:<link.*href=["|'](.+\.css)["|'].*\/?>|<style.*>([^<]*)<\/style>)/gi;
+const REG_CSS = /(?:<link.+href=["|']?(.+\.css)["|']?.*\/?>|<style.*>([^<]*)<\/style>)/gi;
 // 匹配js资源，script外链或内联脚本
-const REG_JS = /(?:<script.*src=["|'](.+\.js)["|'].*><\/script>|<script.*>([^<]*)<\/script>)/gi;
+const REG_JS = /(?:<script.+src=["|']?(.+\.js)["|']?.*><\/script>|<script.*>([^<]*)<\/script>)/gi;
 // 匹配css中的图片/字体资源
 const REG_CSS_ASSETS = /url\(([^\)]+)\)/gi;
 // 匹配_group私有属性
